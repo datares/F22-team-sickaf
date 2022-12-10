@@ -1,0 +1,278 @@
+---
+title: "Fall 2022 DataRes -- Team SickAF"
+author: "Olivia Weisiger"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+For my portion of the COVID data analysis, I conducted data cleaning in R, then 
+created the visualizations pictured in our article using Tableau.
+
+### Reading in Weather and Epidemiology Data
+
+```{r}
+# library(readr)
+# Weather data source: https://github.com/GoogleCloudPlatform/covid-19-open-data/blob/main/docs/table-weather.md
+weather_data <- read.csv("weather.csv")
+summary(weather_data)
+head(weather_data)
+
+# Specifically want to use `new_confirmed` col 
+# Join this with weather data based on region
+# Epidemiology data source: "https://storage.googleapis.com/covid19-open-data/v3/epidemiology.csv")
+covid_data <- read.csv("epidemiology.csv")
+head(covid_data)
+```
+
+### Merging the Weather and Epidemiology Data
+
+```{r}
+library(dplyr)
+combined_data <- covid_data %>% right_join(weather_data, by = c("date", "location_key"))
+
+# Investigating combined data
+table(combined_data$location_key)
+summary(combined_data$new_confirmed)
+
+# Investigating observations with negative cumulative confirmed cases
+which(combined_data$new_confirmed == -5045418)
+combined_data[8761928, ]
+
+which(combined_data$new_confirmed < 0)
+head(combined_data[combined_data$new_confirmed < 0, ])
+```
+
+From the data source, we know that confirmed cumulative case "[v]alues can be 
+negative, typically indicating a correction or an adjustment in the way they were 
+measured. For example, a case might have been incorrectly flagged as recovered 
+one date so it will be subtracted from the following date." Hence, these negative 
+values are not concerning and can be included in the data.
+
+### Creating New `.csv` File for Merged Data
+
+To create a new dataset from our merged data, uncomment and run the lines of code below.
+
+```{r}
+# write.csv(combined_data, "covid_case_weather_data.csv")
+# combined_data <- read.csv("covid_case_weather_data.csv")
+```
+
+### Investigating `location_key` Column
+
+Within the data, the `location_key` column has a nested hierarchical structure
+for locations the COVID data was gathered in the world. For the purposes of our 
+project, we want to use regular expression techniques to isolate location keys 
+that only correspond to the United States (as opposed to other countries in the world).
+
+```{r}
+all_regions <- unique(combined_data$location_key)
+all_regions[grepl("^US", all_regions)]#, ignore.case=TRUE)
+
+# Want to narrow the data down to the US 
+# Need to keep in mind removing NA values
+US_data <- combined_data %>% filter(grepl("^US", location_key))
+head(US_data)
+
+# Isolating states withing the US
+US_state_data <- US_data %>% filter(grepl("^US_", location_key))
+head(US_state_data, n = 1000)
+
+# Isolating counties within the US
+US_county_data <- US_state_data %>% filter(grepl("^US_.*[0-9]$", location_key))
+head(US_county_data, n = 1000)
+```
+
+For our project, we will isolate the state data for the U.S., so to save state 
+specific data to a `.csv` file, remove comments from the code below:
+
+```{r}
+# write.csv(US_state_data, "US_state_data.csv")
+# state_data <- read.csv("US_state_data.csv")
+
+# Ensure it was read in correctly
+# head(state_data)
+```
+
+Note: This state data still includes information for each county in each state, 
+which we will isolate and remove later. 
+
+### Goals for State COVID Data
+
+1. Aggregate columns by state
+
+2. Note date range for future explanation purposes
+
+- Dates range from 2020-01-01 to 2022-09-14 (Jan 1st 2020) - (September 14th 2022)
+
+3. Transform state names to match US dataset names 
+
+4. Merge this data US dataset 
+
+5. Plot the concentration of confirmed cases by state on a map of the US
+- This step was completed using Tableau
+
+```{r}
+table(state_data$location_key)
+
+# Removing county data from state data 
+rm_US_county_data <- state_data %>% filter(!grepl("^US_.*[0-9]$", state_data$location_key))
+
+# Ensure previous step was successful 
+head(rm_US_county_data)
+```
+
+### Data Cleaning for `location_key` Column
+
+```{r}
+loo_key <- rm_US_county_data$location_key
+table(loo_key)
+
+# Transform state names so Tableau can recognize them and match latitude/longitude values
+state_names <- ifelse(loo_key == "US_AK", "Alaska", 
+               ifelse(loo_key == "US_AL", "Alabama", 
+               ifelse(loo_key ==  "US_AR", "Arkansas", 
+               ifelse(loo_key == "US_AS", "American Samoa",
+               ifelse(loo_key == "US_AZ", "Arizona", 
+               ifelse(loo_key == "US_CA", "California",
+               ifelse(loo_key == "US_CA_SFO", "San Francisco", 
+                ifelse(loo_key == "US_CO", "Colorado", 
+                ifelse(loo_key == "US_CT", "Connecticut", 
+                ifelse(loo_key == "US_DC", "District of Columbia", 
+              ifelse(loo_key == "US_DE", "Delaware",  
+                ifelse(loo_key == "US_FL", "Florida", 
+                      ifelse(loo_key == "US_GA", "Georgia", 
+                      ifelse(loo_key == "US_GA_ATL", "Atlanta", 
+                      ifelse(loo_key == "US_GU", "Guam", 
+                      ifelse(loo_key == "US_HI", "Hawaii", 
+                      ifelse(loo_key == "US_IA", "Iowa", 
+                      ifelse(loo_key == "US_ID", "Idaho", 
+                      ifelse(loo_key == "US_IL", "Illinois", 
+                      ifelse(loo_key == "US_IN", "Indiana", 
+                      ifelse(loo_key == "US_KS", "Kansas", 
+                      ifelse(loo_key == "US_KY", "Kentucky", 
+                      ifelse(loo_key == "US_LA", "Louisiana", 
+                      ifelse(loo_key == "US_MA", "Massachusetts", 
+                      ifelse(loo_key == "US_MD", "Maryland", 
+                      ifelse(loo_key == "US_ME", "Maine", 
+                      ifelse(loo_key == "US_MI", "Michigan", 
+                      ifelse(loo_key == "US_MN", "Minnesota", 
+                      ifelse(loo_key == "US_MO", "Missouri", 
+                      ifelse(loo_key == "US_MP", "Northern Mariana Islands", 
+                      ifelse(loo_key == "US_MS", "Mississippi", 
+                      ifelse(loo_key == "US_MT", "Montana", 
+                      ifelse(loo_key == "US_NC", "North Carolina", 
+                      ifelse(loo_key == "US_ND", "North Dakota", 
+                      ifelse(loo_key == "US_NE", "Nebraska", 
+                      ifelse(loo_key == "US_NH", "New Hampshire", 
+                      ifelse(loo_key == "US_NJ", "New Jersey", 
+                      ifelse(loo_key == "US_NM", "New Mexico", 
+                      ifelse(loo_key == "US_NV", "Nevada", 
+                      ifelse(loo_key == "US_NY", "New York", 
+                      ifelse(loo_key == "US_NY_NYC", "New York City", 
+                      ifelse(loo_key == "US_OH", "Ohio", 
+                      ifelse(loo_key == "US_OK", "Oklahoma", 
+                      ifelse(loo_key == "US_OR", "Oregon", 
+                      ifelse(loo_key == "US_PA", "Pennsylvania", 
+                      ifelse(loo_key ==  "US_PR", "Puerto Rico", 
+                      ifelse(loo_key == "US_RI", "Rhode Island", 
+                      ifelse(loo_key == "US_SC", "South Carolina", 
+                      ifelse(loo_key == "US_SD", "South Dakota", 
+                      ifelse(loo_key == "US_TN", "Tennessee", 
+                      ifelse(loo_key == "US_TX", "Texas", 
+                      ifelse(loo_key == "US_UT", "Utah", 
+                      ifelse(loo_key == "US_VA", "Virginia", 
+                      ifelse(loo_key == "US_VI", "Virgin Islands", 
+                      ifelse(loo_key == "US_VT", "Vermont", 
+                      ifelse(loo_key == "US_WA", "Washington", 
+                      ifelse(loo_key == "US_WI", "Wisconsin", 
+                      ifelse(loo_key == "US_WV", "West Virginia", 
+                      ifelse(loo_key == "US_WY", "Wyoming", 0)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+```
+
+### Save Copy of Data Without County Information for Each State
+
+```{r}
+# write.csv(rm_US_county_data, "justState.csv")
+# rm_US_county_data <- reaad.csv("justState.csv")
+```
+
+### Investigating the Data
+
+```{r}
+table(rm_US_county_data$date)
+
+table(rm_US_county_data$new_tested)
+
+head(rm_US_county_data)
+```
+
+### Loading Data About the Population By State
+
+My original data source had demographics for multiple countries, and for the 
+U.S., each county population in each state. For storage purposes of the data
+on my laptop, I used a similar technique as I did above to isolate population 
+data for each U.S. state only. 
+
+```{r}
+alldem <- read.csv("demographics.csv")
+
+# Check data loaded correctly
+head(alldem)
+
+US_dem <- alldem %>% filter(grepl("^US", location_key))
+head(US_dem)
+
+US_state_dem <- US_dem %>% filter(grepl("^US_", location_key))
+head(US_state_dem)
+
+only_state_dem <- US_state_dem %>% filter(!grepl("^US_.*[0-9]$", location_key))
+head(only_state_dem)
+```
+
+### Merging the two data set together
+
+The `only_state_dem` demographics data I created is included in our GitHub repo.
+
+```{r}
+# only_state_dem <- read.csv("only_state_dem.csv")
+
+final_data <- merge(rm_US_county_data, only_state_dem, by = "location_key")
+
+# Check read in correctly
+head(final_data)
+```
+
+### Transformation of Case Counts
+
+To prevent densely populated states like NY, TX, FL, and CA from being overrepresented
+in terms of case severity on our concentration map, we will transform the case 
+caount by state into a proportion (cumulative case count / total popualation in 2021).
+
+```{r}
+case_pop_data <- final_data[, c("location_key", "new_confirmed", "population")]
+
+test <- case_pop_data %>% group_by("location_key")
+
+data_sum2 <- case_pop_data %>% group_by(location_key) %>% 
+  summ(population) %>% 
+  as.data.frame()
+data_sum2  
+
+StateLoc_Conf <- rm_US_county_data[, 3:4] %>% group_by(location_key)  %>% summarise(new_confirmed = sum(new_confirmed, na.rm = TRUE))
+
+propdat <- merge(StateLoc_Conf, only_state_dem[, 1:2], by = 'location_key')
+
+prop_confirmed <- propdat$new_confirmed/propdat$population
+
+prop_conf_data <- cbind(propdat, prop_confirmed)
+```
+
+### Creating Final Dataset
+
+This is the final dataset I created and loaded into Tableau to created my 
+visualizations. 
+
+```{r}
+# write.csv(prop_conf_data, "confirmed_prop_data.csv")
+```
+
